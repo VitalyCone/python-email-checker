@@ -1,0 +1,20 @@
+HTTP 406 Not Acceptable
+Date: Sat, 08 Mar 2025 14:27:34 GMT
+Content-Type: application/json
+Content-Length: 47
+Connection: keep-alive
+Server: nginx
+ETag: "67cc4b69-2f"
+{'error': {'message': 'Not acceptable'}}
+das@mail.ru:123131dasdsa
+
+HTTP 406 Not Acceptable
+Date: Sat, 08 Mar 2025 14:29:31 GMT
+Content-Type: application/json
+Content-Length: 47
+Connection: keep-alive
+Server: nginx
+ETag: "67cbe470-2f"
+{'error': {'message': 'Not acceptable'}}
+das@mail.ru:123131dasdsa
+
